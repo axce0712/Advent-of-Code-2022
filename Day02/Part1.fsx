@@ -1,3 +1,5 @@
+open System.IO
+
 type Shape =
     | Rock
     | Paper
@@ -57,8 +59,6 @@ let solve lines =
     |> Seq.map (parse >> playRound)
     |> Seq.sumBy (fun outcome -> outcome.MyScore)
 
-let input = @"A Y
-B X
-C Z"
+let input = File.ReadLines (Path.Combine (__SOURCE_DIRECTORY__, "input.txt"))
 
-solve (input.Split("\n"))
+solve input
