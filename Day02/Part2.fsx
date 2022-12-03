@@ -14,15 +14,13 @@ type Round = { OpponentShape: Shape; MyOutcome: Outcome }
 
 type Score = { Opponent: int; Me: int }
 
-let parseFirstColumn =
-    function
+let parseFirstColumn = function
     | "A" -> Rock
     | "B" -> Paper
     | "C" -> Scissors
     | x -> failwithf "Unknown value '%s'" x
 
-let parseSecondColumn =
-    function
+let parseSecondColumn = function
     | "X" -> Lose
     | "Y" -> Draw
     | "Z" -> Win
@@ -48,27 +46,30 @@ let findShape round =
     | Scissors, Draw -> Scissors
     | Scissors, Win -> Rock
 
-let shapeScore =
-    function
+let shapeScore = function
     | Rock -> 1
     | Paper -> 2
     | Scissors -> 3
 
-let inverseScore =
-    function
+let inverseOutcome = function
     | Win -> Lose
     | Draw -> Draw
     | Lose -> Win
 
-let outcomeScore =
-    function
+let outcomeScore = function
     | Win -> 6
     | Draw -> 3
     | Lose -> 0
 
 let playRound round =
-    let opponentScore = outcomeScore (inverseScore round.MyOutcome) + shapeScore round.OpponentShape
-    let myScore = outcomeScore round.MyOutcome + shapeScore (findShape round)
+    let opponentScore =
+        outcomeScore (inverseOutcome round.MyOutcome)
+        + shapeScore round.OpponentShape
+
+    let myScore =
+        outcomeScore round.MyOutcome
+        + shapeScore (findShape round)
+
     { Opponent = opponentScore; Me = myScore }
 
 let solve lines =
@@ -77,5 +78,4 @@ let solve lines =
     |> Seq.sumBy (fun outcome -> outcome.Me)
 
 let input = File.ReadLines (Path.Combine (__SOURCE_DIRECTORY__, "input.txt"))
-
 solve input
