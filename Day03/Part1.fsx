@@ -1,16 +1,7 @@
 open System
 open System.IO
 
-let parseCompartments (line: string) =
-    let items = line |> Seq.toList
-    let firstCompartment = items[0..line.Length / 2 - 1]
-    let secondCompartment = items[line.Length / 2..]
-    (firstCompartment, secondCompartment)
-
-let findSameItem (firstCompartment, secondCompartment) =
-    List.find (fun item -> List.contains item secondCompartment) firstCompartment
-
-let getPriority (item: char) =
+let getPriority item =
     if Char.IsLower(item) then
         int item - int 'a' + 1
     else if Char.IsUpper(item) then
@@ -20,7 +11,12 @@ let getPriority (item: char) =
 
 let solve lines =
     lines
-    |> Seq.sumBy (parseCompartments >> findSameItem >> getPriority)
+    |> Seq.map (
+        Seq.splitInto 2
+        >> Seq.map Set.ofArray
+        >> Seq.reduce Set.intersect
+        >> Seq.exactlyOne)
+    |> Seq.sumBy getPriority
 
 let input = File.ReadLines (Path.Combine (__SOURCE_DIRECTORY__, "input.txt"))
 solve input

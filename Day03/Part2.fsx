@@ -1,12 +1,7 @@
 open System
 open System.IO
 
-let findBadgeItemType rucksacks =
-    rucksacks
-    |> Seq.reduce (Set.intersect)
-    |> Seq.head
-
-let getPriority (item: char) =
+let getPriority item =
     if Char.IsLower(item) then
         int item - int 'a' + 1
     else if Char.IsUpper(item) then
@@ -16,8 +11,10 @@ let getPriority (item: char) =
 
 let solve lines =
     lines
+    |> Seq.map Set.ofSeq
     |> Seq.chunkBySize 3
-    |> Seq.sumBy (Seq.map Set.ofSeq >> findBadgeItemType >> getPriority)
+    |> Seq.map (Seq.reduce Set.intersect >> Seq.exactlyOne)
+    |> Seq.sumBy getPriority
 
 let input = File.ReadLines (Path.Combine (__SOURCE_DIRECTORY__, "input.txt"))
 solve input
