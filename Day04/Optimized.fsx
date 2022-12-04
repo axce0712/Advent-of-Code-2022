@@ -6,31 +6,17 @@ type Section = { Start: int; End: int }
 type Assignment = { FirstSection: Section; SecontSection: Section }
 
 let isSubset s1 s2 =
-    let mutable overlapping = true
-    for i in s1.Start..s1.End do
-        let mutable exists = false
-        for j in s2.Start..s2.End do
-            exists <- exists || (i = j)
-        overlapping <- overlapping && exists
-    overlapping
+    s1.Start <= s2.Start && s1.End >= s2.End
 
 let isOverlapping s1 s2 =
-    let mutable overlapping = false
-    for i in s1.Start..s1.End do
-        for j in s2.Start..s2.End do
-            overlapping <- overlapping || (i = j)
-    overlapping
-
+    s1.End >= s2.Start && s1.Start <= s2.End
+    
 let (|Int|) (input: string) = Int32.Parse input
 
-let (|Range|_|) (input : string) =
-    match input.Split("-") with
-    | [| Int a; Int b |] -> Some (a, b)
-    | _ -> None
-
 let parse (line : string) =
-    match line.Split(",") with
-    | [| Range (a, b); Range (c, d) |] ->
+    match line.Split(",") |> Array.map (fun section -> section.Split("-")) with
+    | [| [| Int a; Int b |]
+         [| Int c; Int d |] |] ->
         { FirstSection = { Start = a; End = b }
           SecontSection = { Start = c; End = d } }
     | _ ->
