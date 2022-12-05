@@ -1,8 +1,7 @@
 open System
 open System.IO
 
-type Move =
-    { Count: int; StackSource: int; StackTarget: int }
+type Move = { Count: int; StackSource: int; StackTarget: int }
 
 let parseMove (line : string) =
     let words = line.Split(" ")
@@ -54,7 +53,7 @@ let parse newLine (input : string) =
     let crates = parseCrates stacks (cratesPartLines[..^1])
     let moves =
         parts[1].Split(newLine)
-        |> Seq.map (parseMove)
+        |> Seq.map parseMove
         |> Seq.toList
 
     (crates, moves)
@@ -74,13 +73,13 @@ let move f stacks instruction =
 
 let solve f (stacks, instructions) =
     let finalStacks = List.fold (move f) stacks instructions
-
-    finalStacks
-    |> Map.toSeq
-    |> Seq.sortBy fst
-    |> Seq.map (snd >> List.head)
-    |> Seq.toArray
-    |> String
+    let topCrates =
+        Map.toSeq finalStacks
+        |> Seq.sortBy fst
+        |> Seq.map (snd >> List.head)
+        |> Seq.toArray
+    
+    String topCrates
 
 let input =
     Path.Combine(__SOURCE_DIRECTORY__, "input.txt")
