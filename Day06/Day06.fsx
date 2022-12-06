@@ -3,9 +3,8 @@ open System.IO
 let findStartOfPacket disctinctCount buffer =
     buffer
     |> Seq.windowed disctinctCount
-    |> Seq.indexed
-    |> Seq.tryFind (fun (_, xs) -> Seq.distinct xs |> Seq.length = disctinctCount)
-    |> Option.map (fst >> ((+) disctinctCount))
+    |> Seq.findIndex (fun xs -> Seq.distinct xs |> Seq.length = disctinctCount)
+    |> (+) disctinctCount
 
 let input =
     Path.Combine(__SOURCE_DIRECTORY__, "input.txt")
