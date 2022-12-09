@@ -1,106 +1,81 @@
 open System
 open System.IO
 
-type Tree<'a, 'b> =
-    | Node of 'a * Tree<'a, 'b> list
-    | Leaf of 'b
-
-type Item =
+type Output =
     | Directory of Name : string
     | File of Name : string * Size : int
-
-type Command =
-    | ChangeDirectory of string
-    | List of Item list
 
 let (|Int|_|) (input : string) =
     match Int32.TryParse input with
     | true, value -> Some value
     | false, _ -> None
 
-let parseItem (item : string) =
-    match item.Split(" ") with
-    | [| "dir"; name |] -> Directory name
-    | [| Int size; name |] -> File (name, size)
-    | _ -> invalidArg (nameof item) "Invalid value"
+let split (separator : string) (input : string) =
+    input.Split(separator) |> List.ofSeq
 
-let parseCommand lines =
-    match lines with
-    | "ls" :: rest ->
-        let items = List.map parseItem rest
-        List items
-    | [ cmd ] ->
-        match cmd.Split(" ") with
-        | [| "cd"; dir |] -> ChangeDirectory dir
-        | _ -> failwith $"Cannot handle cmd '%s{cmd}'"
-    | cmd :: _ -> failwith $"Cannot2 handle cmd '%s{cmd}'"
-    | [] -> invalidArg (nameof lines) "Lines must be present"
+let words = split " "
 
-let parse (newLine : string) (input : string) =
-    input.Split("$ ", StringSplitOptions.RemoveEmptyEntries)
-    |> Seq.map (fun part -> part.Trim().Split(newLine) |> Seq.toList |> parseCommand)
-    |> Seq.toList
+let parse lines =
+    let parseFilesAndDirs lines =
+        let rec imp acc lines =
+            match lines with
+            | [ "dir"; name ] :: next -> imp ((Directory name) :: acc) next
+            | [ Int size; name ] :: next -> imp ((File (name, size)) :: acc) next
+            | next -> (List.rev acc, next)
 
-let rec getDirectories commands =
-    let rec imp dirStack dirs commands =
-        match commands with
+        imp [] lines
+        
+    let rec imp dirStack dirs lines =
+        match lines with
         | [] -> dirs
-        | ChangeDirectory ".." :: next -> imp (List.tail dirStack) dirs next
-        | ChangeDirectory d :: next -> imp (d :: dirStack) dirs next
-        | List items :: next ->
-            let current = List.head dirStack
-            let newDir = Map.add current items dirs
-            imp dirStack newDir next
+        | [ "$"; "cd"; "/" ] :: next -> imp [] dirs next
+        | [ "$"; "cd"; ".." ] :: next -> imp (List.tail dirStack) dirs next
+        | [ "$"; "cd"; d ] :: next -> imp (d :: dirStack) dirs next
+        | [ "$"; "ls" ] :: next ->
+            let (filesAndDirs, left) = parseFilesAndDirs next
+            let newDirs = Map.add dirStack filesAndDirs dirs
+            imp dirStack newDirs left
+        | xs -> invalidOp (String.concat " " (List.head xs))
 
-    imp [] Map.empty commands
+    imp [] Map.empty lines
 
-let rec totalSize dirs = function
+let rec totalSize dirStack dirs = function
     | File (_, size) -> size
     | Directory name ->
-        Map.find name dirs
-        |> List.sumBy (totalSize dirs)
+        let newDirStack = name :: dirStack
 
-let solve newLine input =
-    let commands = parse newLine input
-    let dirs = getDirectories commands
+        dirs
+        |> Map.find newDirStack
+        |> List.sumBy (totalSize newDirStack dirs)
+
+let solve fSolve newLine input =
+    let dirs = input |> split newLine |> List.map words |> parse
     let sizePerDir =
         dirs
-        |> Map.map (fun _ xs -> xs |> List.sumBy (totalSize dirs))
+        |> Map.map (fun d xs -> xs |> List.sumBy (totalSize d dirs))
 
-    let sum =
-        sizePerDir
-        |> Map.filter (fun _ totalSize -> totalSize <= 100_000)
-        |> Map.values
-        |> Seq.sum
+    fSolve sizePerDir
 
-    sum
+let part1 dirs =
+    dirs
+    |> Map.filter (fun _ totalSize -> totalSize <= 100_000)
+    |> Map.values
+    |> Seq.sum
+
+let part2 dirs =
+    let sizes = dirs |> Map.values |> Seq.toList
+    let maxSize = List.max sizes
+    let smallest =
+        sizes
+        |> Seq.sort
+        |> Seq.skipWhile (fun size -> 70_000_000 - maxSize + size < 30_000_000)
+        |> Seq.head
+
+    smallest
 
 let input =
     Path.Combine(__SOURCE_DIRECTORY__, "input.txt")
     |> File.ReadAllText
 
-solve Environment.NewLine input
-
-solve "\n" @"$ cd /
-$ ls
-dir a
-14848514 b.txt
-8504156 c.dat
-dir d
-$ cd a
-$ ls
-dir e
-29116 f
-2557 g
-62596 h.lst
-$ cd e
-$ ls
-584 i
-$ cd ..
-$ cd ..
-$ cd d
-$ ls
-4060174 j
-8033020 d.log
-5626152 d.ext
-7214296 k"
+solve part1 Environment.NewLine input
+solve part2 Environment.NewLine input
