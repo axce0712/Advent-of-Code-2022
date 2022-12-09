@@ -1,4 +1,5 @@
 open System
+open System.IO
 
 type Direction =
     | Up
@@ -8,9 +9,18 @@ type Direction =
 
 type Move = { Direction: Direction; Steps: int }
 
-type Position = int * int
+type Position = { X: int; Y: int }
 
-type State = { Head : Position; Tail : Position }
+type State =
+    { Head : Position
+      Tails : Position list
+      TailPositions: Set<Position> }
+
+module Position =
+    let zero = { X = 0; Y = 0 }
+    
+    let distance { X = x1; Y = y1 } { X = x2; Y = y2 } =
+        { X = (x2 - x1); Y = (y2 - y1) }
 
 let (|Int|_|) (input : string) =
     match Int32.TryParse input with
@@ -27,37 +37,62 @@ let parse line =
     | [| "R"; Int steps |] -> { Direction = Right; Steps = steps }
     | _ -> invalidArg (nameof line) line
 
-let initialState = { Head = (0, 0); Tail = (0, 0) }
+let initialState tailCount =
+    { Head = Position.zero
+      Tails = List.replicate tailCount Position.zero
+      TailPositions = Set.singleton Position.zero }
 
-let moveInDirection direction (x, y) =
+let moveInDirection direction pos =
     match direction with
-    | Up -> (x, y + 1)
-    | Down -> (x, y - 1)
-    | Left -> (x - 1, y)
-    | Right -> (x + 1, y)
+    | Up -> { pos with Y = pos.Y + 1 }
+    | Down -> { pos with Y = pos.Y - 1 }
+    | Left -> { pos with X = pos.X - 1 }
+    | Right -> { pos with X = pos.X + 1 }
+
+let readjust p1 p2 =
+    match Position.distance p1 p2 with
+    | { X = 2; Y = 2 } -> { X = p2.X - 1; Y = p2.Y - 1 }
+    | { X = 2; Y = -2 } -> { X = p2.X - 1; Y = p2.Y + 1 }
+    | { X = -2; Y = 2 } -> { X = p2.X + 1; Y = p2.Y - 1 }
+    | { X = -2; Y = -2 } -> { X = p2.X + 1; Y = p2.Y + 1 }
+    | { X = 2 } -> { p2 with X = p2.X - 1 }
+    | { X = -2 } -> { p2 with X = p2.X + 1 }
+    | { Y = 2 } -> { p2 with Y = p2.Y - 1 }
+    | { Y = -2 } -> { p2 with Y = p2.Y + 1 }
+    | _ -> p1
 
 let applyMove move state =
     let rec imp stateSoFar stepsLeft =
         if stepsLeft = 0 then
             stateSoFar
         else
+            let newHead = moveInDirection move.Direction stateSoFar.Head
+            let newTails, lastPosition =
+                (newHead, stateSoFar.Tails)
+                ||> List.mapFold (fun acc pos ->
+                    let newPos = readjust pos acc
+                    newPos, newPos)
+
+            let newTailPositions = Set.add lastPosition stateSoFar.TailPositions
             let newState =
-                { stateSoFar with
-                    Head = moveInDirection move.Direction stateSoFar.Head }
+                { Head = newHead
+                  Tails = newTails
+                  TailPositions = newTailPositions }
 
             imp newState (stepsLeft - 1)
 
     imp state move.Steps
 
-applyMove { Direction = Right; Steps = 4 } initialState
+let flip f x y = f y x
 
-let example = @"R 4
-U 4
-L 3
-D 1
-R 4
-D 1
-L 5
-R 2"
+let solve tailCount lines =
+    let moves = Seq.map parse lines
+    let finalState = Seq.fold (flip applyMove) (initialState tailCount) moves
+    Set.count finalState.TailPositions
 
-split "\n" example |> Array.map parse
+let lines =
+    Path.Combine(__SOURCE_DIRECTORY__, "input.txt")
+    |> File.ReadLines
+
+solve 1 lines
+solve 9 lines
