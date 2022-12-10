@@ -17,16 +17,9 @@ let parse line =
     | [| "addx"; value |] -> Addx (int value)
     | _ -> invalidArg (nameof line) line
 
-let between lower upper value =
-    lower <= value && value <= upper
-
 let cycle state =
-    let lower = (state.SpritePosition - 1) % 40
-    let upper = (state.SpritePosition + 1) % 40
-    let pos = state.Crt.Length % 40
-    let pixel =
-        if between lower upper pos then "#" else "."
-
+    let delta = state.SpritePosition - (state.Crt.Length % 40)
+    let pixel = if abs delta <= 1 then "#" else "."
     { state with Crt = state.Crt + pixel }
 
 let addX value state =
@@ -56,4 +49,4 @@ let lines =
     Path.Combine(__SOURCE_DIRECTORY__, "input.txt")
     |> File.ReadAllLines
 
-solve (Array.toList lines)
+printfn "%s" (solve (Array.toList lines))

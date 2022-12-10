@@ -12,27 +12,18 @@ let parse line =
     | [| "addx"; value |] -> Addx (int value)
     | _ -> invalidArg (nameof line) line
 
-let cycles instructions =
-    let rec imp acc cycle x instructions =
-        match instructions with
-        | [] -> (Map.ofList acc, x)
-        | Noop :: is -> imp ((cycle, x) :: acc) (cycle + 1) x is
-        | Addx v :: is -> imp ((cycle + 1, x) :: (cycle, x) :: acc) (cycle + 2) (x + v) is
-
-    imp [] 1 1 instructions
-
 let solve lines =
-    let signalStrengths, lastX =
+    let cycles =
         lines
-        |> List.map parse
-        |> cycles
+        |> Array.map parse
+        |> Array.collect (function | Noop -> [| 0 |] | Addx v -> [| 0; v |])
+        |> Array.scan (+) 1
 
-    [20; 60; 100; 140; 180; 220]
-    |> List.map (fun n -> n * Map.find n signalStrengths)
-    |> List.sum
+    [20 .. 40 .. 220]
+    |> List.sumBy (fun i -> i * Array.item (i - 1) cycles)
 
 let lines =
     Path.Combine(__SOURCE_DIRECTORY__, "input.txt")
     |> File.ReadAllLines
 
-solve (Array.toList lines)
+solve lines
