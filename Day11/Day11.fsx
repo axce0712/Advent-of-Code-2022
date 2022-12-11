@@ -3,7 +3,9 @@ open System.IO
 
 type MonkeyId = int
 
-type WorryLevel = int
+type WorryLevel = Int64
+
+type Count = Int64
 
 type Expression =
     | Value of int
@@ -23,9 +25,9 @@ type MonkeySetting =
       Test: ThrowInstruction }
 
 type Monkey =
-    { Setting : MonkeySetting
-      Items : Map<WorryLevel, Int64>
-      ItemsMoved : Int64 }
+    { Setting: MonkeySetting
+      Items: Map<WorryLevel, Count>
+      ItemsMoved: Count }
 
 type State = { Monkeys: Map<MonkeyId, Monkey> }
 
@@ -33,32 +35,23 @@ let split (separator: string) (input: string) = input.Split(separator)
 
 let trimEnd (trimChar: char) (input: string) = input.TrimEnd(trimChar)
 
-let trim (trimChar: char) (input: string) = input.Trim(trimChar)
-
 let parseMonkeyId line =
-    let [| _; id |] = line |> trimEnd ':' |> split " "
-    int id
+    line |> trimEnd ':' |> split " " |> Array.last |> int
 
 let parseStartingItems line =
-    let startingItems =
-        line
-        |> split ":"
-        |> Array.last
-        |> split ","
-        |> Array.map (trim ' ' >> int)
-
-    List.ofArray startingItems
+    line |> split ":" |> Array.last |> split "," |> Array.map int |> Array.toList
 
 let parseOperation line =
-    let parseExpression = function
+    let parseExpression =
+        function
         | "old" -> Old
         | value -> Value(int value)
 
     let formula = line |> split " = " |> Array.last
 
     match split " " formula with
-    | [| x; "+"; y |] -> Add (parseExpression x, parseExpression y)
-    | [| x; "*"; y |] -> Multiply (parseExpression x, parseExpression y)
+    | [| x; "+"; y |] -> Add(parseExpression x, parseExpression y)
+    | [| x; "*"; y |] -> Multiply(parseExpression x, parseExpression y)
     | _ -> invalidArg (nameof line) line
 
 let parseThrowInstruction [| line1; line2; line3 |] =
@@ -81,10 +74,14 @@ let parseMonkey newLine part =
     let items =
         startingItems
         |> List.countBy id
-        |> List.map (fun (worryLevel, count) -> (worryLevel, int64 count))
+        |> List.map (fun (worryLevel, count) -> (int64 worryLevel, int64 count))
         |> Map.ofList
 
-    let monkey = { Setting = setting; Items = items; ItemsMoved = 0L }
+    let monkey =
+        { Setting = setting
+          Items = items
+          ItemsMoved = 0L }
+
     (monkeyId, monkey)
 
 let parse newLine input =
@@ -96,74 +93,85 @@ let parse newLine input =
 
     { Monkeys = monkeys }
 
-let evalOperation operation value =
+let evalOperation operation worryLevel =
     let evalExpression =
         function
-        | Value x -> x
-        | Old -> value
+        | Value x -> int64 x
+        | Old -> worryLevel
 
     match operation with
     | Add (x, y) -> (evalExpression x) + (evalExpression y)
     | Multiply (x, y) -> (evalExpression x) * (evalExpression y)
 
-let throw instruction value =
-    if value % instruction.DivisableBy = 0 then
-        (instruction.TrueCase, value)
+let throw instruction worryLevel =
+    if worryLevel % (int64 instruction.DivisableBy) = 0L then
+        (instruction.TrueCase, worryLevel)
     else
-        (instruction.FalseCase, value)
+        (instruction.FalseCase, worryLevel)
 
-let bored x = x / 3
+let bored x = x / 3L
 
-let nextMonkey setting =
+let nextMonkey f setting =
     evalOperation setting.Operation
-    >> bored
+    >> f
     >> throw setting.Test
 
-let run monkeyId monkeys =
-    let monkey =  Map.find monkeyId monkeys
+let removeWorryLevel worryLevel monkey =
+    let count = Map.find worryLevel monkey.Items
+    { monkey with
+        Items = Map.remove worryLevel monkey.Items
+        ItemsMoved = monkey.ItemsMoved + count }
+
+let addWorryLevel worryLevel count monkey =
+    let newCount =
+        monkey.Items
+        |> Map.tryFind worryLevel
+        |> Option.map (fun c -> c + count)
+        |> Option.defaultValue count
+
+    let newItems = Map.add worryLevel newCount monkey.Items
+    { monkey with Items = newItems }
+
+let run f monkeyId monkeys =
+    let monkey = Map.find monkeyId monkeys
     let newMonkeys =
         (monkeys, monkey.Items)
         ||> Map.fold (fun acc worryLevel count ->
-            let monkey = Map.find monkeyId monkeys
-            let (newMonkeyId, newWorryLevel) = nextMonkey monkey.Setting worryLevel
+            let (newMonkeyId, newWorryLevel) = nextMonkey f monkey.Setting worryLevel
             let newAcc =
                 acc
-                |> Map.change
-                    monkeyId
-                    (Option.map (fun m ->
-                        { m with
-                            Items = Map.remove worryLevel m.Items
-                            ItemsMoved = m.ItemsMoved + count }))
-                |> Map.change
-                    newMonkeyId
-                    (Option.map (fun m ->
-                        let newCount =
-                            m.Items
-                            |> Map.tryFind newWorryLevel
-                            |> Option.map (fun c -> c + count)
-                            |> Option.defaultValue count
+                |> Map.change monkeyId (Option.map (removeWorryLevel worryLevel))
+                |> Map.change newMonkeyId (Option.map (addWorryLevel newWorryLevel count))
 
-                        let newItems = Map.add newWorryLevel newCount m.Items
-                        { m with Items = newItems }))
-                    
             newAcc)
 
     newMonkeys
 
-let round state =
-    let flip f x y = f y x
+let flip f x y = f y x
+
+let round f state =
     let newMonkeys =
         Map.keys state.Monkeys
-        |> Seq.sort
-        |> Seq.fold (flip run) state.Monkeys
+        |> Seq.fold (flip (run f)) state.Monkeys
 
     { Monkeys = newMonkeys }
 
-let solve newLine roundCount input =
+let part1 _ = bored
+
+let part2 initialState x =
+    let product =
+        Map.values initialState.Monkeys
+        |> Seq.map (fun m -> m.Setting.Test.DivisableBy)
+        |> Seq.reduce ( * )
+        |> int64
+
+    x % product
+
+let solve f newLine roundCount input =
     let initialState = parse newLine input
-    let finalState = 
-        List.replicate roundCount round
-        |> List.fold (fun state f -> f state) initialState
+    let finalState =
+        List.replicate roundCount (round (f initialState))
+        |> List.fold (|>) initialState
 
     let monkeyBusinessLevel =
         finalState.Monkeys
@@ -172,7 +180,7 @@ let solve newLine roundCount input =
         |> Seq.sortDescending
         |> Seq.take 2
         |> Seq.reduce ( * )
-    
+
     monkeyBusinessLevel
 
 let example =
@@ -204,15 +212,12 @@ Monkey 3:
     If true: throw to monkey 0
     If false: throw to monkey 1"
 
-parse "\n" example |> fun state -> state.Monkeys |> run 0
-
-solve "\n" 1 example
-solve "\n" 20 example
-
+solve part1 "\n" 20 example
+solve part2 "\n" 10000 example
 
 let input =
     Path.Combine(__SOURCE_DIRECTORY__, "input.txt")
     |> File.ReadAllText
 
-solve Environment.NewLine 20 input
-solve Environment.NewLine 10000 input
+solve part1 Environment.NewLine 20 input
+solve part2 Environment.NewLine 10000 input
