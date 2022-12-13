@@ -34,22 +34,19 @@ let parsePacket chars =
 
     Seq.toList chars |> imp []  |> fst |> List.head
 
-let parsePart newLine input =
-    let [| line1; line2 |] = split newLine input
-    (parsePacket line1, parsePacket line2)
-
 let parse newLine input =
-    let parts = split (String.replicate 2 newLine) input
-    parts |> Array.map (parsePart newLine)
+    input
+    |> split (String.replicate 2 newLine)
+    |> Array.collect (split newLine >> Array.map parsePacket)
 
 let rec compare p1 p2 =
     match p1, p2 with
     | List [], List [] -> 0
-    | List [], List _ -> 1
-    | List _, List [] -> -1
+    | List [], List _ -> -1
+    | List _, List [] -> 1
     | List (Integer x :: xs), List (Integer y :: ys) ->
-        if x < y then 1
-        else if x > y then -1
+        if x < y then -1
+        else if x > y then 1
         else compare (List xs) (List ys)
     | List (List x :: xs), List (List y :: ys) ->
         match compare (List x) (List y) with
@@ -66,10 +63,17 @@ let rec compare p1 p2 =
     | _ -> failwithf "Cannot handle packets %A and %A" p1 p2
 
 let solve newLine input =
+    let dividerPackets = [| List [ Integer 2 ]; List [ Integer 6] |]
+
     parse newLine input
-    |> Array.mapi (fun index (p1, p2) -> (index + 1, compare p1 p2))
-    |> Array.choose (fun (pair, result) -> if result = 1 then Some pair else None)
-    |> Array.sum
+    |> Array.append dividerPackets
+    |> Array.sortWith compare
+    |> Array.mapi (fun i packet -> (i + 1, packet))
+    |> Array.choose (fun (index, packet) ->
+        if Array.contains packet dividerPackets
+        then Some index
+        else None)
+    |> Array.reduce ( * )
 
 let example = @"[1,1,3,1,1]
 [1,1,5,1,1]
