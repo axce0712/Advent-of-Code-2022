@@ -1,4 +1,3 @@
-open System
 open System.IO
 
 type Material =
@@ -34,20 +33,27 @@ let createMap lines =
     |> Array.collect (parse >> createStones)
     |> Array.fold (fun acc pos -> Map.add pos Stone acc) Map.empty
 
-let example = @"498,4 -> 498,6 -> 496,6
-503,4 -> 502,4 -> 502,9 -> 494,9"
-
 let rec dropSand (x, y) map =
-    match Map.tryFind (x, y + 1) map with
-    | None -> dropSand (x, y + 1) map
-    | Some _ ->
-        match Map.tryFind (x - 1, y + 1) map, Map.tryFind (x + 1, y + 1) map with
-        | None, _ -> dropSand (x - 1, y + 1) map
-        | _, None -> dropSand (x + 1, y + 1) map
-        | Some _, Some _ -> (x, y)
+    if not (Seq.exists (fun (_, y2) -> y2 > y) (Map.keys map)) then
+        None
+    else
+        match Map.tryFind (x, y + 1) map with
+        | None -> dropSand (x, y + 1) map
+        | Some _ ->
+            match Map.tryFind (x - 1, y + 1) map, Map.tryFind (x + 1, y + 1) map with
+            | None, _ -> dropSand (x - 1, y + 1) map
+            | _, None -> dropSand (x + 1, y + 1) map
+            | Some _, Some _ -> Some (x, y)
+    
+let produceSand map =
+    let rec imp (x, y) map =
+        match dropSand (x, y) map with
+        | Some p ->
+            let newMap = Map.add p Sand map
+            imp (x, y) newMap
+        | None -> map
 
-let step (x, y) map =
-    Map.add (dropSand (x, y) map) Sand map
+    imp (500, 0) map
 
 let print map =
     let positions = Seq.toList (Map.keys map)
@@ -65,32 +71,23 @@ let print map =
 
         printfn ""
 
-split "\n" example
-|> createMap
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> step (500, 0)
-|> print
+let solve lines =
+    let sandedMap = createMap lines |> produceSand
+    (0, sandedMap)
+    ||> Map.fold (fun  acc _ material ->
+        match material with
+        | Sand -> acc + 1
+        | Stone -> acc)
 
+let example = @"498,4 -> 498,6 -> 496,6
+503,4 -> 502,4 -> 502,9 -> 494,9"
 
+split "\n" example |> solve
+
+let lines =
+    Path.Combine(__SOURCE_DIRECTORY__, "input.txt")
+    |> File.ReadAllLines
+
+#time
+solve lines
+#time
