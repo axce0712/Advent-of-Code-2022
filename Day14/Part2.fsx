@@ -4,18 +4,26 @@ type Material =
     | Stone
     | Sand
 
-type X = int
+type Range = { Stone : int; TopSand : int option }
 
-type Y = int
+let top r = r.TopSand |> Option.defaultValue r.Stone
 
-type Range = { Stone : Y; TopSand : Y option }
+let next y ranges =
+    let isFilled = ranges |> List.map top |> List.min
+    if isFilled = 0 then
+        None
+    else
+        ranges
+        |> List.filter (fun r -> top r > y)
+        |> List.sortBy (fun r -> r.Stone)
+        |> List.tryHead
 
-type State = Map<X, Range list>
+let contains y ranges =
+    ranges
+    |> List.exists (fun r -> top r <= y && y <= r.Stone)
 
-let contains y { Stone = sy; TopSand = sand } =
-    sand
-    |> Option.map (fun ty -> ty <= y && y <= y)
-    |> Option.defaultValue (sy = y)
+let countSand range =
+    range.Stone - (range.TopSand |> Option.defaultValue range.Stone)
 
 let findMaterial y { Stone = sy; TopSand = sand } =
     match sand with
@@ -23,10 +31,8 @@ let findMaterial y { Stone = sy; TopSand = sand } =
     | _ when sy = y -> Some Stone
     | _ -> None
 
-let top range =
-    range.TopSand |> Option.defaultValue range.Stone
-
-let split (separator: string) (input: string) = input.Split(separator)
+let split (separator: string) (input: string) =
+    input.Split(separator)
 
 let parseCoordiante input =
     let [| x; y |] = split "," input
@@ -63,31 +69,64 @@ let createMap lines =
         (x, ranges))
     |> Map.ofSeq
 
-let tryFindBlocker (x, y) stones =
-    stones
-    |> Array.filter (fun { Position = (sx, sy) } -> x = sx && sy > y)
-    |> Array.sortBy (fun { Position = (_, y) } -> y)
-    |> Array.tryHead
+let floorY map =
+    Map.values map
+    |> Seq.map (fun rs -> rs |> List.map (fun r -> r.Stone) |> List.max)
+    |> Seq.max
+    |> (+) 2
 
-let rec dropSand (x, y) (stones : Map<int, Range list>) =
-    match Map.tryFind x stones with
+let ensureFloor floorY x map =
+    let newMap =
+        map
+        |> Map.change x (function
+            | None -> [ { Stone = floorY; TopSand = None } ] |> Some
+            | Some rs when rs |> List.exists (fun r -> r.Stone = floorY) |> not -> { Stone = floorY; TopSand = None } :: rs |> Some
+            | Some _ as rs -> rs)
+
+    newMap
+
+let changeSand sy ty r =
+    if r.Stone = sy then { r with TopSand = Some ty } else r
+
+let rec dropSand floorY (x, y) map =
+    match Map.tryFind x map with
     | Some rs ->
-        match rs |> List.tryFind (contains y) |> Option.map top with
-        | Some ty ->
-            let left =
-                Map.tryFind (x - 1) stones
-                |> Option.bind (fun rs -> rs |> List.tryFind (fun r -> contains ty r))
+        match next y rs with
+        | Some range ->
+            let ty = top range
+            let newMap = map |> ensureFloor floorY (x - 1) |> ensureFloor floorY (x + 1)
+            let leftFree =
+                Map.tryFind (x - 1) newMap
+                |> Option.map ((contains ty) >> not)
+                |> Option.defaultValue false
 
-            let right =
-                Map.tryFind (x + 1) stones
-                |> Option.bind (fun rs -> rs |> List.tryFind (fun r -> contains ty r))
+            let rightFree =
+                Map.tryFind (x + 1) newMap
+                |> Option.map ((contains ty) >> not)
+                |> Option.defaultValue false
 
-            match left, right with
-            | None, _ -> dropSand (x - 1, ty) stones
-            | _, None -> dropSand (x + 1, ty) stones
-            | Some _, Some _ -> Some (x, ty - 1)
+            match leftFree, rightFree with
+            | true, _ -> dropSand floorY (x - 1, ty) newMap
+            | _, true -> dropSand floorY (x + 1, ty) newMap
+            | _ ->
+                newMap
+                |> Map.change x (Option.map (List.map (changeSand range.Stone (ty - 1))))
+                |> Some
         | None -> None
     | None -> None
+
+let run map =
+    let rec imp floorY acc =
+        match dropSand floorY (500, 0) acc with
+        | Some newAcc -> imp floorY newAcc
+        | None -> acc
+
+    let floorY = floorY map
+    let flooredMap =
+        map
+        |> Map.fold (fun acc x _ -> ensureFloor floorY x acc) map
+
+    imp floorY flooredMap
 
 let print stones =
     let xs = Map.keys stones |> Seq.toArray
@@ -112,19 +151,19 @@ let print stones =
 
         printfn ""
 
+let solve lines =
+    let map = createMap lines
+    let filled = run map
+    let sandCount =
+        Map.values filled
+        |> Seq.sumBy (Seq.sumBy countSand)
+
+    sandCount
+
 let example = @"498,4 -> 498,6 -> 496,6
 503,4 -> 502,4 -> 502,9 -> 494,9"
 
-split "\n" example
-|> createMap
-|> print
-
-|> step
-|> step
-|> step
-|> step
-|> step
-|> print
+split "\n" example |> solve
 
 let lines =
     Path.Combine(__SOURCE_DIRECTORY__, "input.txt")
